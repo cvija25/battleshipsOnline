@@ -1,10 +1,28 @@
+use serde::Deserialize;
+use warp::filters::log::log;
+use warp::{Reply,Rejection,http::StatusCode,http::Method};
 use warp::Filter;
+use warp::cors;
 use warp::ws::{WebSocket,Message};
 use futures::{SinkExt, StreamExt};
 use tokio::sync::{mpsc,Notify, broadcast};
 use std::sync::Arc;
+use sqlx::{PgPool, Pool, Postgres, Row};
+use std::convert::Infallible;
+use auth::create_jwt;
 
 mod game_manager;
+mod auth;
+#[derive(Deserialize)]
+struct LoginRequest {
+    username: String,
+    password: String
+}
+
+#[derive(Deserialize)]
+struct JWTreq {
+    jwt: String
+}
 
 #[tokio::main]
 async fn main() {
@@ -29,11 +47,57 @@ async fn main() {
             ws.on_upgrade(move |socket| handle_socket(socket, game_manager_tx, gm_to_client_rx, game_ready_notify))
         });
 
+    let cors = warp::cors()
+        .allow_origin("http://localhost:3000")
+        .allow_methods(&[Method::GET, Method::POST])
+        .allow_headers(vec!["Content-Type", "Authorization"]);
+
+    let connection = PgPool::connect("postgresql://postgres:password@localhost:5432/battleships").await.unwrap();
+    let login_route = warp::path("login")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_db(connection.clone()))
+        .and_then(login)
+        .with(cors);
+
+    // let konacno : String = result.get("username");
+
+    let routes = ws_route.or(login_route);
+    // println!("{}",konacno);
     println!("WebSocket server running on ws://localhost:8000/ws");
 
     // runs server
-    warp::serve(ws_route).run(([127, 0, 0, 1], 8000)).await;
+    warp::serve(routes).run(([127, 0, 0, 1], 8000)).await;
 }
+
+fn with_db(pool: Pool<Postgres>) -> impl Filter<Extract = (Pool<Postgres>,), Error = Infallible> + Clone {
+    warp::any().map(move || pool.clone())
+}
+
+async fn login(req: LoginRequest, pool: PgPool) -> Result<impl Reply, Rejection> {
+    let query = "SELECT username FROM users WHERE username = $1 AND password = $2";
+
+    let result = sqlx::query(query)
+        .bind(&req.username)
+        .bind(&req.password)
+        .fetch_optional(&pool)
+        .await
+        .map_err(|_| warp::reject::custom(MyCustomError))?;
+
+    if let Some(row) = result {
+        let username: String = row.get("username");
+        let token = create_jwt(req.username, req.password).unwrap();
+        Ok(warp::reply::json(&token))
+    } else {
+        let error_msg = warp::reply::json(&"Invalid credentials"); 
+        Ok(error_msg)
+    }
+}
+
+// Custom error handling
+#[derive(Debug)]
+struct MyCustomError;
+impl warp::reject::Reject for MyCustomError {}
 
 fn with_receiver(
     rx: Arc<broadcast::Receiver<String>>
