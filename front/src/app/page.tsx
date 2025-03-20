@@ -14,7 +14,7 @@ const Home: React.FC = () => {
       <main className="p-4">
         <h1 className="text-2xl font-bold mb-6">Welcome to Battleships online!!</h1>
         <Login/>
-        <Link href={'game/board'}>play</Link>
+        <Link href={'/board'}>play</Link>
       </main>
     </div>
   );

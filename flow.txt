@@ -1,0 +1,26 @@
+MM - matchmaker
+GM - gamemanager
+HC - handleclient
+
+FE
+- igrac klikne play, poveze se soket 
+- tad se ide na board i loading je sve dog ne dobije game_obj od servera
+- igrac napravi board i salje serveru i loading je sve dok ne dobije game_started od servera
+- tad se ide na game/{game_id} i posivljena je tabla i nmze da igra ako nije na potezu
+- na stranici pise ime protivnika i ciji je potez
+- live dobija rezultat hit/miss
+
+BE
+- klient klikne play, FE prikazuje loading dok ne dobije response
+- main pravi novi thread MM sa kojim ima dvo kanalsku komunikaciju i tu konekciju daje handleclient web socketu
+- hc prvo salje ime igraca i ceka game_obj gde se nalazi ime protivnika i game_id
+- mm ceka da oba igraca posalju ime
+- napravi novi game thread s kojim napravi dvokanalsku komunikaciju ciji jedan kanal ubaci u mapu gde je key game_id,
+a drugi da game thread-u i obojici klijenata posalje game_obj
+- hc kada primi game_obj iz njega uzima game_id koji koristi da dobije kanal komunikacije do game_thread-a 
+
+todo:
+- GM ceka da mu oba igraca prvo posalju board i tada igra pocinje gde se obojici igraca salje ciji je potez
+- igraci igraju u zavisnosnti ciji je red
+- HC sa fronta ceka da dobije potez dalje ga on salje GM
+- od GM dobija hit/miss sto HC salje klientu
