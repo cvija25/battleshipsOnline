@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::{Arc,Mutex}};
+use std::{collections::HashMap, sync::{Arc,Mutex}, thread::sleep};
 
 //use futures::lock::Mutex;
 use serde::{Deserialize,Serialize};
@@ -45,24 +45,27 @@ struct JWTreq {
 #[tokio::main]
 async fn main() {
 
-    let (channel1, channel2) = BiDirectionalChannel::new();
+    let channel1 = BiDirectionalChannel::new();
+    let channel2 = BiDirectionalChannel::new();
     
     // key: gameID | value: channel to game instance 
-    let games_map: Arc<Mutex<HashMap<String, BiDirectionalChannel>>> = Arc::new(Mutex::new(HashMap::new()));
+    let games_map: Arc<Mutex<HashMap<String, (BiDirectionalChannel,BiDirectionalChannel)>>> = Arc::new(Mutex::new(HashMap::new()));
 
-    tokio::spawn(matchmaker::matchmaker(channel1, games_map.clone()));
+    tokio::spawn(matchmaker::matchmaker(channel1.clone(), channel2.clone(), games_map.clone()));
 
-    let channel_filter = warp::any().map(move || channel2.clone());
+    let channel1_filter = warp::any().map(move || channel2.clone());
+    let channel2_filter = warp::any().map(move || channel1.clone());
     let games_map_filter = warp::any().map(move || games_map.clone());
 
     // routes
     // --------------------------------------------------------
     let ws_route = warp::path("ws")
         .and(warp::ws())
-        .and(channel_filter)
+        .and(channel1_filter)
+        .and(channel2_filter)
         .and(games_map_filter)
-        .map(|ws: warp::ws::Ws, channel: BiDirectionalChannel, games_map: Arc<Mutex<HashMap<String, BiDirectionalChannel>>>| {
-            ws.on_upgrade(move |socket| handle_socket(socket,channel, games_map))
+        .map(|ws: warp::ws::Ws, to_mm: BiDirectionalChannel, from_mm: BiDirectionalChannel, games_map: Arc<Mutex<HashMap<String, (BiDirectionalChannel,BiDirectionalChannel)>>>| {
+            ws.on_upgrade(move |socket| handle_socket(socket,to_mm, from_mm, games_map))
         });
 
     // let game_route = warp::path("game")
@@ -161,27 +164,28 @@ impl warp::reject::Reject for MyCustomError {}
 // Handle the WebSocket connection
 async fn handle_socket(
     ws: WebSocket,
-    channel: BiDirectionalChannel,
-    games_map: Arc<Mutex<HashMap<String, BiDirectionalChannel>>>
+    to_mm: BiDirectionalChannel,
+    from_mm: BiDirectionalChannel,
+    games_map: Arc<Mutex<HashMap<String, (BiDirectionalChannel,BiDirectionalChannel)>>>
 ) {
     println!("New WebSocket connection established");
 
     // transmission, receiver
     let (mut tx, mut rx) = ws.split();
     let player_name = format!("player_{}", rand::random::<u8>());
-    channel.send(player_name.clone());
-    let game_obj_str: String = channel.receive().await.unwrap();
-    println!("HC game_obj_str {}",game_obj_str);
+    to_mm.send(player_name.clone());
+    let game_obj_str: String = from_mm.receive().await.unwrap();
+    println!("HC game_obj_str {} for {}",game_obj_str,player_name);
     let game_obj : GameObj = serde_json::from_str(&game_obj_str).unwrap(); 
     let game_id : String = game_obj.game_id;
     // gets game chan from gameinstacemap
-    
+
     let lock = games_map.lock().unwrap();
-    let game = lock.get(&game_id).unwrap();
-    game.send(player_name.clone());
-    // game.receive().await.expect("greska");
-    
-    tx.send(Message::text("chubaka"));
+    let (from_gm, to_gm) = lock.get(&game_id).unwrap();
+    to_gm.send(player_name.clone());
+    tx.send(Message::text("uspeo"));
+    // from_gm.receive().await.unwrap();
+    // tx.send(Message::text("chubaka"));
 
     
     println!("WebSocket connection closed");

@@ -1,31 +1,24 @@
 use std::sync::{Arc,Mutex,mpsc};
+use tokio::sync::broadcast::{channel, Sender, Receiver, error::{SendError, RecvError}};
 
 #[derive(Clone)]
 pub struct BiDirectionalChannel {
-    sender: mpsc::Sender<String>,
-    receiver: Arc<Mutex<mpsc::Receiver<String>>>
+    sender: Sender<String>,
 }
 
 impl BiDirectionalChannel {
-    pub fn new() -> (Self, Self) {
-        let (tx1, rx1) = mpsc::channel();
-        let (tx2, rx2) = mpsc::channel();
-
-        let rx1 = Arc::new(Mutex::new(rx1));
-        let rx2 = Arc::new(Mutex::new(rx2));
-
-        let channel1 = BiDirectionalChannel {sender:tx1,receiver:rx2};
-        let channel2 = BiDirectionalChannel {sender:tx2,receiver:rx1};
-
-        (channel1, channel2)
+    pub fn new() -> Self {
+        let (tx, _) = channel(10);
+        let channel = BiDirectionalChannel { sender: tx };
+        channel
     }
 
-    pub fn send(&self, message: String) -> Result<(), mpsc::SendError<String>> {
+    pub fn send(&self, message: String) -> Result<usize, SendError<String>> {
         self.sender.send(message)
     }
 
-    pub async fn receive(&self) -> Result<String, mpsc::RecvError> {
-        let lock = self.receiver.lock().unwrap();
-        lock.recv()
+    pub async fn receive(&self) -> Result<String, RecvError> {
+        let mut rx = self.sender.subscribe();
+        rx.recv().await
     }
 }

@@ -11,11 +11,12 @@ struct Cell {
 
 // GameManager waits for two players before allowing them to interact
 pub async fn game_manager(
-    rx: BiDirectionalChannel
+    to_hc: BiDirectionalChannel,
+    from_hc: BiDirectionalChannel
 ) {
-    let player1 = rx.receive().await.unwrap();
+    let player1 = from_hc.receive().await.unwrap();
     println!("Player joined: {}", player1);
-    let player2 = rx.receive().await.unwrap();
+    let player2 = from_hc.receive().await.unwrap();
     println!("Player joined: {}", player2);
     // game_ready_notify.notify_waiters();
 
