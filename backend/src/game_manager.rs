@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, mpsc, Notify};
+use warp::filters::ws::Message;
 use std::{sync::Arc, usize};
 use crate::utils::BiDirectionalChannel;
 
@@ -12,12 +13,15 @@ struct Cell {
 // GameManager waits for two players before allowing them to interact
 pub async fn game_manager(
     to_hc: BiDirectionalChannel,
-    from_hc: BiDirectionalChannel
+    from_hc: BiDirectionalChannel,
+    to_mm :BiDirectionalChannel,
 ) {
+    to_mm.send("ready".to_string());
     let player1 = from_hc.receive().await.unwrap();
-    println!("Player joined: {}", player1);
+    println!("GM Player joined: {}", player1);
     let player2 = from_hc.receive().await.unwrap();
-    println!("Player joined: {}", player2);
+    println!("GM Player joined: {}", player2);
+    to_hc.send("pocinjemo".to_string());
     // game_ready_notify.notify_waiters();
 
     // let mut inner_board1:[[bool; 5];5] = [[false; 5];5];

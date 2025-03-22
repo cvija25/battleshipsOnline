@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::{Arc,Mutex}, thread::sleep};
+use std::{collections::HashMap, sync::{Arc,Mutex}, thread::sleep, time::Duration};
 
 //use futures::lock::Mutex;
 use serde::{Deserialize,Serialize};
@@ -184,9 +184,10 @@ async fn handle_socket(
         let lock = games_map.lock().unwrap(); // Lock the mutex
         lock.get(&game_id).unwrap().clone() // Get the channels
     };
+    println!("HC sending to gm");
     to_gm.send(player_name.clone()); // Use to_gm
     tx.send(Message::text("uspeo")).await;
-    from_gm.receive().await.unwrap();
+    println!("{}",from_gm.receive().await.unwrap());
     // tx.send(Message::text("chubaka"));
 
     

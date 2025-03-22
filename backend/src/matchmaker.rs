@@ -26,8 +26,11 @@ pub async fn matchmaker(to_hc: BiDirectionalChannel, from_hc: BiDirectionalChann
     games_map.lock().unwrap().insert(game_id.clone(), (ch1.clone(), ch2.clone()));
     // // activates the thread for game instace, adds it to hashmap and returns main a gameID
     
-    tokio::spawn(game_manager(ch1.clone(), ch2.clone()));
-
+    println!("MM spawned gm");
+    let to_mm : BiDirectionalChannel = BiDirectionalChannel::new();
+    tokio::spawn(game_manager(ch1.clone(), ch2.clone(), to_mm.clone()));
+    to_mm.receive().await.unwrap();
+    println!("MM send to_hc");
     to_hc.send(serde_json::to_string(&game_obj).unwrap());
 }
 
