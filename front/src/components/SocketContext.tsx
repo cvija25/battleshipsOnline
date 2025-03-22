@@ -25,10 +25,6 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
       console.log('WebSocket connection established');
     };
 
-    socket.onmessage = (ev) => {
-      console.log(ev.data);
-    }
-
     socket.onclose = () => {
       console.log('WebSocket connection closed');
     };

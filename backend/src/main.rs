@@ -178,13 +178,15 @@ async fn handle_socket(
     println!("HC game_obj_str {} for {}",game_obj_str,player_name);
     let game_obj : GameObj = serde_json::from_str(&game_obj_str).unwrap(); 
     let game_id : String = game_obj.game_id;
-    // gets game chan from gameinstacemap
+    // // gets game chan from gameinstacemap
 
-    let lock = games_map.lock().unwrap();
-    let (from_gm, to_gm) = lock.get(&game_id).unwrap();
-    to_gm.send(player_name.clone());
-    tx.send(Message::text("uspeo"));
-    // from_gm.receive().await.unwrap();
+    let (from_gm, to_gm) =  {
+        let lock = games_map.lock().unwrap(); // Lock the mutex
+        lock.get(&game_id).unwrap().clone() // Get the channels
+    };
+    to_gm.send(player_name.clone()); // Use to_gm
+    tx.send(Message::text("uspeo")).await;
+    from_gm.receive().await.unwrap();
     // tx.send(Message::text("chubaka"));
 
     
