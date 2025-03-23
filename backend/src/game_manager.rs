@@ -49,24 +49,24 @@ pub async fn game_manager(
     println!("board1 {:?} \nboard2 {:?}", inner_board1, inner_board2);
     
     to_hc.send(player1.clone()).expect("cant sent turn to hc");
-    // let mut turn = 0;
-    // while let Ok(result) = from_hc.receive().await {
-    //     let data: Cell = serde_json::from_str(&result).unwrap();
-    //     if turn % 2 == 0 {
-    //         if inner_board2[data.row][data.col] {
-    //             to_hc.send("Hit!".to_string()).expect("nije");
-    //         } else {
-    //             to_hc.send("Miss!".to_string()).expect("nije");
-    //         }
-    //         to_hc.send(player2.clone());
-    //     } else {
-    //         if inner_board1[data.row][data.col] {
-    //             to_hc.send("Hit!".to_string()).expect("nije");
-    //         } else {
-    //             to_hc.send("Miss!".to_string()).expect("nije");
-    //         }
-    //         to_hc.send(player1.clone());
-    //     }
-    //     turn += 1;
-    // }
+    let mut turn = 0;
+    while let Some(result) = from_hc.recv().await {
+        let data: Cell = serde_json::from_str(&result).unwrap();
+        if turn % 2 == 0 {
+            if inner_board2[data.row][data.col] {
+                to_hc.send("Hit!".to_string()).expect("nije");
+            } else {
+                to_hc.send("Miss!".to_string()).expect("nije");
+            }
+            to_hc.send(player2.clone());
+        } else {
+            if inner_board1[data.row][data.col] {
+                to_hc.send("Hit!".to_string()).expect("nije");
+            } else {
+                to_hc.send("Miss!".to_string()).expect("nije");
+            }
+            to_hc.send(player1.clone());
+        }
+        turn += 1;
+    }
 }

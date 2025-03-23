@@ -7,6 +7,7 @@ import { useState } from "react";
 interface GridProps {
     rows: number;
     columns: number;
+    gameID: String;
 }
 
 interface Cell {
@@ -14,7 +15,7 @@ interface Cell {
     col: number;
 }
 
-const SetUp:React.FC<GridProps> = ({ rows, columns }) => {
+const SetUp:React.FC<GridProps> = ({ rows, columns, gameID }) => {
     const ws = useWebSocket();
     const handleClick = () => {
         ws?.send(JSON.stringify(clickedCells));
@@ -49,7 +50,7 @@ const SetUp:React.FC<GridProps> = ({ rows, columns }) => {
                     ))}
                 </div>
             </div>
-            <Link href={'1'} onClick={handleClick}>
+            <Link href={'/game/'+gameID} onClick={handleClick}>
                 <div className={`w-32 h-16 border border-gray-300 flex items-center justify-center text-sm cursor-pointer`}>Play</div>
             </Link>
         </>

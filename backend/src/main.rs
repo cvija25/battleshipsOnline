@@ -210,20 +210,24 @@ async fn handle_socket(
         }
     }
     let mut from_gm1 = from_gm.resubscribe();
-    let turn = from_gm1.recv().await.expect("error receiveing turn from gm");
+    let mut turn = from_gm1.recv().await.expect("error receiveing turn from gm");
+    let mut result = String::new();
+    rx.next().await; // first client ready
+    rx.next().await; // second client ready
     println!("turn: {}", turn);
     tx.send(Message::text("gameLoad")).await.expect("error sending gameLoad to client");
-    // loop {
-    //     if turn == player_name {
-    //         tx.send(Message::text("ready"));
-    //         let p_move = rx.next().await.unwrap().unwrap().to_str().unwrap().to_string();
-    //         to_gm.send(p_move);
-    //     } else {
-    //         tx.send(Message::text("no"));
-    //     }
-    //     println!("{}",from_gm.receive().await.unwrap());
-    // }
-    // from_gm.receive().await.unwrap();
+    loop {
+        if turn == player_name {
+            tx.send(Message::text("ready")).await.expect("error sending redy to client");
+            let p_move = rx.next().await.unwrap().unwrap().to_str().unwrap().to_string();
+            to_gm.send(p_move).await.expect("error sending move to gm");
+        } else {
+            tx.send(Message::text("no")).await.expect("error sending unready to client");
+        }
+        result = from_gm1.recv().await.expect("error receiving result");
+        tx.send(Message::text(result)).await.expect("error sending res to client");
+        turn = from_gm1.recv().await.expect("error receiveing turn from gm");
+    }
     println!("WebSocket connection closed");
 }
 
