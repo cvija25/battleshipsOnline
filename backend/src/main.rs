@@ -225,7 +225,10 @@ async fn handle_socket(
             tx.send(Message::text("no")).await.expect("error sending unready to client");
         }
         result = from_gm1.recv().await.expect("error receiving result");
-        tx.send(Message::text(result)).await.expect("error sending res to client");
+        tx.send(Message::text(result.clone())).await.expect("error sending res to client");
+        if result == "win" || result == "tie" {
+            break;
+        }
         turn = from_gm1.recv().await.expect("error receiveing turn from gm");
     }
     println!("WebSocket connection closed");

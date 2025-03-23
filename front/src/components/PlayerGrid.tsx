@@ -14,7 +14,7 @@ interface Cell {
 
 const PlayerGrid: React.FC<GridProps> = ({ rows, columns }) => {
   const [clickedCells, setClickedCells] = useState<Cell[]>([]);
-  const array = Array.from({length:rows});
+  const array = Array.from({length: rows});
   const socket = useWebSocket();
 
   const handleCellClick = (row: number, col: number) => {
@@ -38,7 +38,7 @@ const PlayerGrid: React.FC<GridProps> = ({ rows, columns }) => {
                 clickedCells.some(
                   (cell) => cell.row === rowIndex && cell.col === colIndex
                 )
-                  ? "bg-blue-300"
+                  ? "bg-orange-500"
                   : "bg-white hover:bg-gray-100"
               }`}
               onClick={() => handleCellClick(rowIndex, colIndex)}

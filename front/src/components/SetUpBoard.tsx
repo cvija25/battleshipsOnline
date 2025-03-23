@@ -38,7 +38,7 @@ const SetUp:React.FC<GridProps> = ({ rows, columns, gameID }) => {
                                         clickedCells.some(
                                             (cell) => cell.row === rowIndex && cell.col === colIndex
                                         )
-                                        ? "bg-blue-300"
+                                        ? "bg-orange-500"  // Changed from bg-blue-300 to bg-orange-500
                                         : "bg-white hover:bg-gray-100"
                                     }`}
                                     onClick={() => handleCellClick(rowIndex, colIndex)}

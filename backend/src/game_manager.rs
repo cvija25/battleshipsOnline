@@ -50,23 +50,39 @@ pub async fn game_manager(
     
     to_hc.send(player1.clone()).expect("cant sent turn to hc");
     let mut turn = 0;
+    let mut points1 = 0;
+    let mut points2 = 0;
     while let Some(result) = from_hc.recv().await {
         let data: Cell = serde_json::from_str(&result).unwrap();
         if turn % 2 == 0 {
             if inner_board2[data.row][data.col] {
+                if points1 == 4 {
+                    to_hc.send("win".to_string()).expect("error sending win res");
+                    break;
+                }
                 to_hc.send("Hit!".to_string()).expect("nije");
+                points1 += 1;
             } else {
                 to_hc.send("Miss!".to_string()).expect("nije");
             }
-            to_hc.send(player2.clone());
+            to_hc.send(player2.clone()).expect("error sending turn");
         } else {
             if inner_board1[data.row][data.col] {
+                if points2 == 4 {
+                    to_hc.send("win".to_string()).expect("error sending win res");
+                    break;
+                }
                 to_hc.send("Hit!".to_string()).expect("nije");
+                points2 += 1;
             } else {
                 to_hc.send("Miss!".to_string()).expect("nije");
             }
-            to_hc.send(player1.clone());
+            to_hc.send(player1.clone()).expect("error sending turn");
         }
         turn += 1;
+        if turn == 15 {
+            to_hc.send("tie".to_string()).expect("error sending win res");
+            break;
+        }
     }
 }
