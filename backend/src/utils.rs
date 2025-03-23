@@ -1,15 +1,14 @@
-use std::sync::{Arc,Mutex,mpsc};
-use tokio::sync::broadcast::{channel, Sender, Receiver, error::{SendError, RecvError}};
+use tokio::sync::broadcast::{channel, Sender, error::{SendError, RecvError}};
 
 #[derive(Clone)]
-pub struct BiDirectionalChannel {
+pub struct BroadcastChannel {
     sender: Sender<String>,
 }
 
-impl BiDirectionalChannel {
+impl BroadcastChannel {
     pub fn new() -> Self {
         let (tx, _) = channel(10);
-        let channel = BiDirectionalChannel { sender: tx };
+        let channel = BroadcastChannel { sender: tx };
         channel
     }
 

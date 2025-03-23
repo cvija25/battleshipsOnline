@@ -1,33 +1,34 @@
-use std::{collections::HashMap, sync::{Arc,Mutex}, thread::sleep, time::Duration};
+use std::{collections::HashMap, sync::{Arc,Mutex}};
 
 //use futures::lock::Mutex;
 use serde::{Deserialize,Serialize};
-use warp::{Reply,Rejection,http::Method};
+// use warp::{Reply,Rejection,http::Method};
 use warp::Filter;
-use warp::cors;
+// use warp::cors;
 use warp::ws::{WebSocket,Message};
 use futures::{SinkExt, StreamExt};
-use sqlx::{PgPool, Pool, Postgres, Row};
+// use sqlx::{PgPool, Pool, Postgres, Row};
 // use std::convert::Infallible;
 // use auth::create_jwt;
+use tokio::sync::{broadcast,mpsc};
 
 mod game_manager;
 mod auth;
 mod matchmaker;
 mod utils;
 
-use utils::BiDirectionalChannel;
+// use utils::BroadcastChannel;
 
-#[derive(Deserialize)]
-struct LoginRequest {
-    username: String,
-    password: String
-}
+// #[derive(Deserialize)]
+// struct LoginRequest {
+//     username: String,
+//     password: String
+// }
 
-#[derive(Deserialize)]
-struct GameRequest {
-    username: String
-}
+// #[derive(Deserialize)]
+// struct GameRequest {
+//     username: String
+// }
 
 #[derive(Serialize, Deserialize)]
 struct GameObj {
@@ -36,25 +37,25 @@ struct GameObj {
     game_id:String,
 }
 
-#[derive(Deserialize)]
-struct JWTreq {
-    jwt: String
-}
+// #[derive(Deserialize)]
+// struct JWTreq {
+//     jwt: String
+// }
 
 
 #[tokio::main]
 async fn main() {
 
-    let channel1 = BiDirectionalChannel::new();
-    let channel2 = BiDirectionalChannel::new();
+    let (btx,_) = broadcast::channel(10);
+    let (mtx,mrx) = mpsc::channel(10);
     
-    // key: gameID | value: channel to game instance 
-    let games_map: Arc<Mutex<HashMap<String, (BiDirectionalChannel,BiDirectionalChannel)>>> = Arc::new(Mutex::new(HashMap::new()));
+    // key: gameID | value: (to_x, from_x)
+    let games_map: Arc<Mutex<HashMap<String, (mpsc::Sender<String>,broadcast::Receiver<String>)>>> = Arc::new(Mutex::new(HashMap::new()));
 
-    tokio::spawn(matchmaker::matchmaker(channel1.clone(), channel2.clone(), games_map.clone()));
+    tokio::spawn(matchmaker::matchmaker(btx.clone(), mrx, games_map.clone()));
 
-    let channel1_filter = warp::any().map(move || channel2.clone());
-    let channel2_filter = warp::any().map(move || channel1.clone());
+    let channel1_filter = warp::any().map(move || mtx.clone());
+    let channel2_filter = warp::any().map(move || btx.subscribe());
     let games_map_filter = warp::any().map(move || games_map.clone());
 
     // routes
@@ -64,7 +65,7 @@ async fn main() {
         .and(channel1_filter)
         .and(channel2_filter)
         .and(games_map_filter)
-        .map(|ws: warp::ws::Ws, to_mm: BiDirectionalChannel, from_mm: BiDirectionalChannel, games_map: Arc<Mutex<HashMap<String, (BiDirectionalChannel,BiDirectionalChannel)>>>| {
+        .map(|ws: warp::ws::Ws, to_mm: mpsc::Sender<String>, from_mm: broadcast::Receiver<String>, games_map: Arc<Mutex<HashMap<String, (mpsc::Sender<String>,broadcast::Receiver<String>)>>>| {
             ws.on_upgrade(move |socket| handle_socket(socket,to_mm, from_mm, games_map))
         });
 
@@ -124,9 +125,9 @@ async fn main() {
 // }
 
 // Custom error handling
-#[derive(Debug)]
-struct MyCustomError;
-impl warp::reject::Reject for MyCustomError {}
+// #[derive(Debug)]
+// struct MyCustomError;
+// impl warp::reject::Reject for MyCustomError {}
 
 // fn with_receiver(
 //     rx: Arc<broadcast::Receiver<String>>
@@ -164,33 +165,65 @@ impl warp::reject::Reject for MyCustomError {}
 // Handle the WebSocket connection
 async fn handle_socket(
     ws: WebSocket,
-    to_mm: BiDirectionalChannel,
-    from_mm: BiDirectionalChannel,
-    games_map: Arc<Mutex<HashMap<String, (BiDirectionalChannel,BiDirectionalChannel)>>>
+    to_mm: mpsc::Sender<String>,
+    mut from_mm: broadcast::Receiver<String>,
+    games_map: Arc<Mutex<HashMap<String, (mpsc::Sender<String>,broadcast::Receiver<String>)>>>
 ) {
     println!("New WebSocket connection established");
 
     // transmission, receiver
     let (mut tx, mut rx) = ws.split();
     let player_name = format!("player_{}", rand::random::<u8>());
-    to_mm.send(player_name.clone());
-    let game_obj_str: String = from_mm.receive().await.unwrap();
+    
+    to_mm.send(player_name.clone()).await.expect("hc cant send to mm");
+    
+    let game_obj_str: String = from_mm.recv().await.expect("error receiving gameobj from mm");
     println!("HC game_obj_str {} for {}",game_obj_str,player_name);
-    let game_obj : GameObj = serde_json::from_str(&game_obj_str).unwrap(); 
+
+    let game_obj : GameObj = serde_json::from_str(&game_obj_str).expect("error parsing gameobj"); 
     let game_id : String = game_obj.game_id;
     // // gets game chan from gameinstacemap
 
-    let (from_gm, to_gm) =  {
-        let lock = games_map.lock().unwrap(); // Lock the mutex
-        lock.get(&game_id).unwrap().clone() // Get the channels
+    let (to_gm, from_gm) =  {
+        let lock = games_map.lock().unwrap();
+        // let map = &*lock;
+        let (a,b) = lock.get(&game_id).unwrap();
+        (a.clone(), b.resubscribe())
     };
-    println!("HC sending to gm");
-    to_gm.send(player_name.clone()); // Use to_gm
-    tx.send(Message::text("uspeo")).await;
-    println!("{}",from_gm.receive().await.unwrap());
-    // tx.send(Message::text("chubaka"));
 
-    
+    println!("HC sending to gm");
+    to_gm.send(player_name.clone()).await.expect("hc can't send to gm");
+    tx.send(Message::text(game_id)).await.expect("error sending gameID to client");
+
+    println!("HC Receiving board from client");
+    if let Some(res1)= rx.next().await {
+        if let Ok(res2) = res1 {
+            if let Ok(res3)= res2.to_str() {
+                println!("Sending board to gm");
+                to_gm.send(res3.to_string()).await.expect("cant send board to gm");
+            } else {
+                println!("got error parsing message to string");
+            }
+            
+        } else {
+            println!("got errror from client");
+        }
+    }
+    let mut from_gm1 = from_gm.resubscribe();
+    let turn = from_gm1.recv().await.expect("error receiveing turn from gm");
+    println!("turn: {}", turn);
+    tx.send(Message::text("gameLoad")).await.expect("error sending gameLoad to client");
+    // loop {
+    //     if turn == player_name {
+    //         tx.send(Message::text("ready"));
+    //         let p_move = rx.next().await.unwrap().unwrap().to_str().unwrap().to_string();
+    //         to_gm.send(p_move);
+    //     } else {
+    //         tx.send(Message::text("no"));
+    //     }
+    //     println!("{}",from_gm.receive().await.unwrap());
+    // }
+    // from_gm.receive().await.unwrap();
     println!("WebSocket connection closed");
 }
 
