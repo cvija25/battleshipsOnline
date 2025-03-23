@@ -28,31 +28,33 @@ const SetUp:React.FC<GridProps> = ({ rows, columns, gameID }) => {
     };
     return (
         <>    
-            <div>
-                <div className="flex flex-col space-y-2">
-                    {array.map((_,rowIndex) => (
-                        <div key={rowIndex} className="flex space-x-2">
-                        {array.map((_,colIndex) => (
-                            <div key={colIndex}
-                                className={`w-16 h-16 border border-gray-300 flex items-center justify-center text-sm cursor-pointer ${
-                                clickedCells.some(
-                                (cell) => cell.row === rowIndex && cell.col === colIndex
-                                )
-                                ? "bg-blue-300"
-                                : "bg-white"
-                            }`}
-                            onClick={() => handleCellClick(rowIndex, colIndex)}
-                            >
-                            {`(${rowIndex}, ${colIndex})`}
-                            </div>
+            <div className="min-h-screen bg-blue-600 flex items-center justify-center p-4">
+                <div className="flex flex-col space-y-4">
+                    <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+                        {array.map((_,rowIndex) => (
+                            array.map((_,colIndex) => (
+                                <div key={`${rowIndex}-${colIndex}`}
+                                    className={`w-16 h-16 bg-white rounded-lg border border-gray-200 flex items-center justify-center font-sans text-gray-800 text-sm cursor-pointer transition-colors duration-200 ${
+                                        clickedCells.some(
+                                            (cell) => cell.row === rowIndex && cell.col === colIndex
+                                        )
+                                        ? "bg-blue-300"
+                                        : "bg-white hover:bg-gray-100"
+                                    }`}
+                                    onClick={() => handleCellClick(rowIndex, colIndex)}
+                                >
+                                    {`(${rowIndex}, ${colIndex})`}
+                                </div>
+                            ))
                         ))}
+                    </div>
+                    <Link href={'/game/'+gameID} onClick={handleClick}>
+                        <div className="w-32 h-12 bg-blue-500 hover:bg-blue-600 text-white rounded-lg flex items-center justify-center font-sans text-base font-medium cursor-pointer transition-colors duration-200">
+                            Play
                         </div>
-                    ))}
+                    </Link>
                 </div>
             </div>
-            <Link href={'/game/'+gameID} onClick={handleClick}>
-                <div className={`w-32 h-16 border border-gray-300 flex items-center justify-center text-sm cursor-pointer`}>Play</div>
-            </Link>
         </>
     );
 }
