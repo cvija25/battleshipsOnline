@@ -1,11 +1,10 @@
 use rand;
 use serde::Serialize;
-use std::{collections::HashMap, sync::{Arc,Mutex}};
 // use crate::utils::BroadcastChannel;
 use std::collections::VecDeque;
-use crate::game_manager::game_manager;
+use crate::{game_manager::game_manager, games};
 use tokio::sync::{oneshot,broadcast,mpsc};
-
+use actix::Addr;
 #[derive(Serialize)]
 struct GameObj {
     p1:String,
@@ -13,16 +12,14 @@ struct GameObj {
     game_id:String,
 }
 
-type GamesMapType = Arc<Mutex<HashMap<String, (mpsc::Sender<String>,broadcast::Receiver<String>)>>>;
-
-async fn create_game(p1:String, p2:String, games_map: GamesMapType, to_hc: broadcast::Sender<String>) {
+async fn create_game(p1:String, p2:String, games_map: Addr<games::Games>, to_hc: broadcast::Sender<String>) {
     let game_id = rand::random_range(0..=10).to_string();
     let game_obj: GameObj = GameObj {p1, p2, game_id};
 
     let (btx, _) = broadcast::channel(10);
     let (mtx, mrx) = mpsc::channel(10);
 
-    games_map.lock().unwrap().insert(game_obj.game_id.clone(), (mtx, btx.subscribe()));
+    games_map.send(games::SetGame { key:game_obj.game_id.clone(), value:(mtx, btx.subscribe())} ).await;
     
     println!("MM spawned gm");
     let (tx,rx) = oneshot::channel();
@@ -37,7 +34,7 @@ async fn create_game(p1:String, p2:String, games_map: GamesMapType, to_hc: broad
     to_hc.send(serde_json::to_string(&game_obj).unwrap()).expect("error sending gameObj to hc");
 } 
 
-pub async fn matchmaker(to_hc: broadcast::Sender<String>, mut from_hc: mpsc::Receiver<String>, games_map: GamesMapType) {
+pub async fn matchmaker(to_hc: broadcast::Sender<String>, mut from_hc: mpsc::Receiver<String>, games_map: Addr<games::Games>) {
     let mut queue = VecDeque::<String>::new();
 
     while let Some(username) = from_hc.recv().await {

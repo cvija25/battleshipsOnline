@@ -1,5 +1,7 @@
 use std::{collections::HashMap, sync::{Arc,Mutex}};
 
+use actix::{Actor, Addr};
+use games::{GetRX, GetTX};
 //use futures::lock::Mutex;
 use serde::{Deserialize,Serialize};
 // use warp::{Reply,Rejection,http::Method};
@@ -16,6 +18,7 @@ mod game_manager;
 mod auth;
 mod matchmaker;
 mod utils;
+mod games;
 
 // use utils::BroadcastChannel;
 
@@ -43,20 +46,20 @@ struct GameObj {
 // }
 
 
-#[tokio::main]
+#[actix::main]
 async fn main() {
 
     let (btx,_) = broadcast::channel(10);
     let (mtx,mrx) = mpsc::channel(10);
     
     // key: gameID | value: (to_x, from_x)
-    let games_map: Arc<Mutex<HashMap<String, (mpsc::Sender<String>,broadcast::Receiver<String>)>>> = Arc::new(Mutex::new(HashMap::new()));
+    let games_actor = games::Games { games_map : HashMap::new() }.start();
 
-    tokio::spawn(matchmaker::matchmaker(btx.clone(), mrx, games_map.clone()));
+    tokio::spawn(matchmaker::matchmaker(btx.clone(), mrx, games_actor.clone()));
 
     let channel1_filter = warp::any().map(move || mtx.clone());
     let channel2_filter = warp::any().map(move || btx.subscribe());
-    let games_map_filter = warp::any().map(move || games_map.clone());
+    let games_map_filter = warp::any().map(move || games_actor.clone());
 
     // routes
     // --------------------------------------------------------
@@ -65,8 +68,8 @@ async fn main() {
         .and(channel1_filter)
         .and(channel2_filter)
         .and(games_map_filter)
-        .map(|ws: warp::ws::Ws, to_mm: mpsc::Sender<String>, from_mm: broadcast::Receiver<String>, games_map: Arc<Mutex<HashMap<String, (mpsc::Sender<String>,broadcast::Receiver<String>)>>>| {
-            ws.on_upgrade(move |socket| handle_socket(socket,to_mm, from_mm, games_map))
+        .map(|ws: warp::ws::Ws, to_mm: mpsc::Sender<String>, from_mm: broadcast::Receiver<String>, games_actor: Addr<games::Games>| {
+            ws.on_upgrade(move |socket| handle_socket(socket,to_mm, from_mm, games_actor))
         });
 
     // let game_route = warp::path("game")
@@ -167,7 +170,7 @@ async fn handle_socket(
     ws: WebSocket,
     to_mm: mpsc::Sender<String>,
     mut from_mm: broadcast::Receiver<String>,
-    games_map: Arc<Mutex<HashMap<String, (mpsc::Sender<String>,broadcast::Receiver<String>)>>>
+    games_map: Addr<games::Games>
 ) {
     println!("New WebSocket connection established");
 
@@ -184,12 +187,8 @@ async fn handle_socket(
     let game_id : String = game_obj.game_id;
     // // gets game chan from gameinstacemap
 
-    let (to_gm, from_gm) =  {
-        let lock = games_map.lock().unwrap();
-        // let map = &*lock;
-        let (a,b) = lock.get(&game_id).unwrap();
-        (a.clone(), b.resubscribe())
-    };
+    let to_gm = games_map.send(GetTX{game_id:game_id.clone()}).await.unwrap(); 
+    let from_gm = games_map.send(GetRX{game_id:game_id.clone()}).await.unwrap();
 
     println!("HC sending to gm");
     to_gm.send(player_name.clone()).await.expect("hc can't send to gm");
